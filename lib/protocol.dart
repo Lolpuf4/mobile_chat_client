@@ -1,55 +1,57 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'connection.dart';
+import 'package:path_provider/path_provider.dart';
+
 
 class Protocol {
   static const int headerSize = 64;
-  static Future<List<int>> get_info(Stream<Uint8List> stream, int size) async {      //Future allows for await
-    final info = <int>[];
-    await for (final chunk in stream) {
-      info.addAll(chunk);
-        if (info.length >= size) break;
-      }
 
-    return info;
-  }
-
-
-  static Future<List<String>> recv(Stream<Uint8List> stream) async {
-    final headerBytes = await get_info(stream, headerSize);
+  static Future<List<String>> recv(Connection conn) async {
+    final headerBytes = await conn.get_info(headerSize);
     final header = utf8.decode(headerBytes);
+    print(header);
 
     final parts = header.split(",");
     final type = parts[0];
-    final size = int.parse(parts[1]);             //int.parse() = int()
+    final size = int.parse(parts[1]);
 
     var fileName = parts[2].replaceAll("*", "");
-    fileName = fileName.substring(0, fileName.length - 1);       //substring = text[start:finish]
+    fileName = fileName.substring(0, fileName.length - 1);
 
-    final dataBytes = await get_info(stream, size);
+    final dataBytes = await conn.get_info(size);
 
     if (type == "TXT" || type == "ERR" || type == "DIC") {
       return [type, utf8.decode(dataBytes)];
     }
 
-    final file = File("recv_files/$fileName");         //creates object for file but not the file yet
-    await file.writeAsBytes(dataBytes);               //auto opens/closes file
+
+    final dir = await getApplicationDocumentsDirectory();
+    final recvDir = Directory('${dir.path}/recv_files');
+
+    if (!await recvDir.exists()) {
+      await recvDir.create(recursive: true);
+    }
+
+    final file = File('${recvDir.path}/$fileName');
+    await file.writeAsBytes(dataBytes);
     return [type, file.path];
   }
 
 
   static Future<void> send(Socket socket, String type, List<int> data, String filePath) async {
     final dataSize = data.length;
-    final sizeStr = dataSize.toString().padLeft(8, '0');           // converts int to str and adds 0s in the beginning to fill up the whole size part
+    final sizeStr = dataSize.toString().padLeft(8, '0');
 
-    final fileName = filePath.split("/").last;                   //  filepath/image.png - > [filepath, image.png] -> image.png
-    final paddedFile = fileName.padLeft(50, '*');      //adds * to fill up the whole name part
+    final fileName = filePath.split("/").last;
+    final paddedFile = fileName.padLeft(50, '*');
 
-    final header = "$type,$sizeStr,$paddedFile:";       //creates the header
+    final header = "$type,$sizeStr,$paddedFile:";
 
-    socket.add(utf8.encode(header));     //add the header to the socket buffer
-    socket.add(data);            //add the data to the socket buffer
-    await socket.flush();        //sent everything that is in the buffer        await prevents some bugs because it is an asynced action
+    socket.add(utf8.encode(header));
+    socket.add(data);
+    await socket.flush();
   }
 
   static Future<void> sendText(Socket socket, String text) async {

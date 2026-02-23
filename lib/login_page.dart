@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'connection.dart';
 import 'chatpage.dart';
+import 'helpers.dart';
 
 
 class LoginPage extends StatefulWidget {                                                          //stateful widget allow for updating in real time
@@ -15,7 +16,40 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _usernameController = TextEditingController();                      //final - is assinged once
   final TextEditingController _passwordController = TextEditingController();                      // controllers are created to "work" with the input boxes (get data from, clear ect.)
   final Connection connection = Connection();
+  @override
+  void initState() {
+    super.initState();
+    autoFillFromCookie(_usernameController, _passwordController);
+  }
+
   String errorMessage = "";
+
+
+  Future<void> autoFillFromCookie(TextEditingController usernameController, TextEditingController passwordController,) async {
+    final cookies_data = await loadCookie();
+
+    if (cookies_data == null) {
+      return;
+    }
+
+    final parts = cookies_data["date"].split("/");
+    final savedDate = DateTime(
+      int.parse(parts[0]),
+      int.parse(parts[1]),
+      int.parse(parts[2]),
+    );
+
+    final now = DateTime.now();
+    final difference = now.difference(savedDate).inDays;
+
+    if (difference >= 7) {
+      return;
+    }
+
+    usernameController.text = cookies_data["username"];
+    passwordController.text = cookies_data["password"];
+  }
+
 
   void _login() async{                                            //checks if the user got correct log in data, returns nothing but will go to the chat window if the log in is successful (not done yet)
     final username = _usernameController.text; //puts the text from the input box into a variable
